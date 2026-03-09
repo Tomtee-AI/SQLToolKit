@@ -36,7 +36,7 @@ SQL Server DBA Toolkit: A collection of scripts and tools for database administr
    ```bash
    git clone https://github.com/Tomtee-AI/sql-server-dba-toolkit.git
 
-Acknowledgments
+## Acknowledgments
 Inspired by / built upon community resources such as:
 
 Ola Hallengren's Maintenance Solution
