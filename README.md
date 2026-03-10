@@ -5,9 +5,9 @@ SQL Server DBA Toolkit: A collection of scripts and tools for database administr
 **A collection of powerful, battle-tested T-SQL scripts, utilities, and tools to make SQL Server database administration faster, safer, and more efficient.**
 
 ![SQL Server Logo](https://img.shields.io/badge/SQL%20Server-2016%2B-blue?logo=microsoft-sql-server&logoColor=white)
-![License](https://img.shields.io/github/license/Tomtee-AI/sql-server-dba-toolkit?style=flat-square)
-![Stars](https://img.shields.io/github/stars/Tomtee-AI/sql-server-dba-toolkit?style=social)
-![Forks](https://img.shields.io/github/forks/Tomtee-AI/sql-server-dba-toolkit?style=social)
+![License](https://img.shields.io/github/license/Tomtee-AI/SQLToolkit?style=flat-square)
+![Stars](https://img.shields.io/github/stars/Tomtee-AI/SQLToolkit?style=social)
+![Forks](https://img.shields.io/github/forks/Tomtee-AI/SQLToolkit?style=social)
 
 ## ✨ Features
 
