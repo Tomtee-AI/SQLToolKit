@@ -37,6 +37,20 @@ SQL Server DBA Toolkit: A collection of scripts and tools for database administr
    git clone https://github.com/Tomtee-AI/SQLToolKit.git
 
 ## Quick Start / Usage
+Example: Check current blocking sessions and wait stats
+SQL-- 1. Navigate to the scripts folder
+-- 2. Open: Troubleshooting\Who is blocking whom - detailed.sql
+
+-- Customize variables if needed (most scripts have them at the top)
+DECLARE @ShowFullSQL bit = 1;
+DECLARE @ThresholdSeconds int = 5;
+
+-- Run the script
+EXEC dbo.usp_WhoIsBlocking @ShowFullSQL = @ShowFullSQL, @ThresholdSeconds = @ThresholdSeconds;
+Another example: Run a full instance health check
+SQL-- Open: Health-Check\SQL Server Instance Health Check - comprehensive.sql
+-- Review parameters, then execute
+See the Scripts Overview section below for more examples.
 ## Scripts  Overview
 ## Contributing
 ## License
