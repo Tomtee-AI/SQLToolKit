@@ -39,13 +39,15 @@ SQL Server DBA Toolkit: A collection of scripts and tools for database administr
 ## Quick Start / Usage
 
 Example: Check current blocking sessions and wait stats
-SQL-- 1. Navigate to the scripts folder
+-- 1. Navigate to the scripts folder
 -- 2. Open: Troubleshooting\Who is blocking whom - detailed.sql
 
 -- Customize variables if needed (most scripts have them at the top)
 DECLARE @ShowFullSQL bit = 1;
 DECLARE @ThresholdSeconds int = 5;
 
+-- Run the script
+EXEC dbo.usp_WhoIsBlocking @ShowFullSQL = @ShowFullSQL, @ThresholdSeconds = @ThresholdSeconds;
 -- Run the script
 EXEC dbo.usp_WhoIsBlocking @ShowFullSQL = @ShowFullSQL, @ThresholdSeconds = @ThresholdSeconds;
 Another example: Run a full instance health check
