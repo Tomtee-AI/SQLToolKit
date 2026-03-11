@@ -67,3 +67,6 @@ Brent Ozar's sp_Blitz suite
 Erik Darling's Darling Data scripts
 Various SQL Server Central / Stack Overflow gems
 ## Contact & Feedback
+tethomasson@gmail.com
+https://www.linkedin.com/in/thomas-thomasson-58319673/
+https://x.com/tom_thomasson
