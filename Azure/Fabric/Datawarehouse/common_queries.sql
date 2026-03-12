@@ -1,0 +1,3 @@
+SELECT last_run_command, number_of_runs, number_of_successful_runs, number_of_failed_runs
+FROM queryinsights.frequently_run_queries
+ORDER BY number_of_runs DESC;
