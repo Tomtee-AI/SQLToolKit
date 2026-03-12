@@ -2,13 +2,13 @@
     SQL Server Instance Health Check - Comprehensive
     =========================================================================
     Purpose:    Quick overview of SQL Server instance and database health
-    Author:     Thomas Thomasson (written with Grok )
+    Author:     Tomtee.eth (customized for DBA Toolkit)
     Compatible: SQL Server 2016+
     Usage:      Execute in SSMS / Azure Data Studio. Review warnings in red/orange.
     =========================================================================
     Sections:
-      1. Server & Instance Information
-      2. Database Overview
+      1. Server & Instance Information (now includes auth mode, port, forced encryption + cert)
+      2. Database Overview (now includes Containment + TDE status)
       3. Disk Space (Data & Log files)
       4. Memory & Page Life Expectancy
       5. CPU & Wait Stats Snapshot
@@ -22,6 +22,7 @@ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 
 PRINT '================================================================================';
 PRINT '1. SERVER & INSTANCE INFORMATION';
+PRINT '   (Includes authentication mode, listener port, forced encryption status)';
 PRINT '================================================================================';
 
 SELECT
@@ -36,33 +37,91 @@ SELECT
     ,@@VERSION AS [FullVersionString]
     ,sqlserver_start_time AS [SQLServerStarted]
     ,DATEDIFF(DAY, sqlserver_start_time, GETDATE()) AS [DaysUptime]
-    ,CASE
+    ,CASE 
         WHEN CONVERT(INT, SERVERPROPERTY('IsClustered')) = 1 THEN 'Clustered'
         ELSE 'Standalone'
     END AS [ClusterStatus]
-    ,CASE
+    ,CASE 
         WHEN CONVERT(INT, SERVERPROPERTY('IsHadrEnabled')) = 1 THEN 'AlwaysOn Enabled'
         ELSE 'AlwaysOn Not Enabled'
     END AS [AlwaysOnStatus]
+    ,CASE SERVERPROPERTY('IsIntegratedSecurityOnly')
+        WHEN 1 THEN 'Windows Authentication only'
+        WHEN 0 THEN 'Mixed Mode (Windows + SQL Authentication)'
+        ELSE 'Unknown'
+    END AS [AuthenticationMode]
+    ,(SELECT TOP 1 
+        CAST(port AS varchar(10)) + ' (' + type_desc + ')' 
+      FROM sys.dm_tcp_listener_states 
+      WHERE state_desc = 'ONLINE' 
+      ORDER BY port) AS [ListenerPort_TCP]
+    ,CASE 
+        WHEN CONVERT(bit, SERVERPROPERTY('IsEncrypted')) = 1 
+             THEN 'Forced Encryption ENABLED'
+        ELSE 'Forced Encryption DISABLED'
+     END AS [ConnectionEncryptionStatus]
+    ,CASE 
+        WHEN CONVERT(bit, SERVERPROPERTY('IsEncrypted')) = 1 
+             THEN 'Certificate details visible only in SQL Server Configuration Manager (Protocols → Certificate tab) or registry (HKLM\...\SuperSocketNetLib)'
+        ELSE 'N/A'
+     END AS [EncryptionCertificateNote]
 FROM sys.dm_os_sys_info;
 
-
 PRINT '================================================================================';
-PRINT '2. DATABASE OVERVIEW (Size, Status, Recovery Model)';
+PRINT '2. DATABASE OVERVIEW (Size, Status, Recovery Model, Containment, TDE)';
+PRINT '   (Contained = partially or fully contained database)';
+PRINT '   (Contained AG = database in a contained availability group - SQL 2022+)';
+PRINT '   (TDE = Transparent Data Encryption enabled + certificate name)';
 PRINT '================================================================================';
 
 SELECT
     DB_NAME(d.database_id) AS [DatabaseName]
     ,d.state_desc AS [State]
-    ,recovery_model_desc AS [RecoveryModel]
-    ,compatibility_level AS [CompatLevel]
-    ,CONVERT(DECIMAL(12,2), SUM(CASE WHEN type_desc = 'ROWS' THEN size * 8.0 / 1024 ELSE 0 END)) AS [DataSizeGB]
-    ,CONVERT(DECIMAL(12,2), SUM(CASE WHEN type_desc = 'LOG' THEN size * 8.0 / 1024 ELSE 0 END)) AS [LogSizeGB]
+    ,d.recovery_model_desc AS [RecoveryModel]
+    ,d.compatibility_level AS [CompatLevel]
+    ,CASE d.containment_desc
+        WHEN 'NONE' THEN 'Not Contained'
+        WHEN 'PARTIAL' THEN 'Partially Contained'
+        WHEN 'FULL' THEN 'Fully Contained'
+        ELSE d.containment_desc
+    END AS [ContainmentStatus]
+    ,CASE 
+        WHEN ag.is_contained = 1 THEN 'Yes - Contained AG: ' + ag.name
+        WHEN ag.name IS NOT NULL THEN 'Yes - Standard AG: ' + ag.name
+        ELSE 'No'
+     END AS [AvailabilityGroup]
+    ,CASE 
+        WHEN ed.database_id IS NOT NULL THEN 'ENABLED - Cert: ' + c.name
+        ELSE 'Disabled'
+     END AS [TransparentDataEncryption]
+    ,CONVERT(DECIMAL(12,2), 
+        SUM(CASE WHEN mf.type_desc = 'ROWS' THEN mf.size * 8.0 / 1024 ELSE 0 END)) AS [DataSizeGB]
+    ,CONVERT(DECIMAL(12,2), 
+        SUM(CASE WHEN mf.type_desc = 'LOG' THEN mf.size * 8.0 / 1024 ELSE 0 END)) AS [LogSizeGB]
     ,COUNT(*) AS [FileCount]
-FROM sys.master_files mf
-INNER JOIN sys.databases d ON d.database_id = mf.database_id
+FROM sys.databases d
+INNER JOIN sys.master_files mf ON d.database_id = mf.database_id
+LEFT JOIN sys.availability_replicas ar 
+    ON EXISTS (
+        SELECT 1 
+        FROM sys.dm_hadr_availability_replica_states hars
+        WHERE hars.replica_id = ar.replica_id
+          AND hars.is_local = 1
+    )
+LEFT JOIN sys.availability_groups ag ON ar.group_id = ag.group_id
+LEFT JOIN sys.dm_database_encryption_keys ed ON d.database_id = ed.database_id
+LEFT JOIN sys.certificates c ON ed.encryptor_thumbprint = c.thumbprint
 WHERE d.source_database_id IS NULL          -- exclude snapshots
-GROUP BY d.database_id, d.state_desc, recovery_model_desc, compatibility_level
+GROUP BY 
+    d.database_id
+    ,d.state_desc
+    ,d.recovery_model_desc
+    ,d.compatibility_level
+    ,d.containment_desc
+    ,ag.name
+    ,ag.is_contained
+    ,ed.database_id
+    ,c.name
 ORDER BY DataSizeGB DESC;
 
 
@@ -82,7 +141,7 @@ PRINT '=========================================================================
         ,CONVERT(DECIMAL(20,2), vs.total_bytes / 1024.0 / 1024.0) AS TotalSpaceGB
     FROM sys.master_files mf
     CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
-    WHERE mf.database_id > 4                    -- skip system DBs for cleaner output
+    WHERE mf.database_id > 4
 )
 SELECT
     Drive
@@ -92,7 +151,7 @@ SELECT
     ,CONVERT(DECIMAL(12,2), SizeMB / 1024) AS SizeGB
     ,CONVERT(DECIMAL(12,2), FreeSpaceGB) AS FreeGB
     ,CONVERT(DECIMAL(5,2), FreeSpaceGB * 100.0 / NULLIF(TotalSpaceGB,0)) AS [%Free]
-    ,CASE
+    ,CASE 
         WHEN FreeSpaceGB < 5 THEN 'CRITICAL'
         WHEN FreeSpaceGB < 20 THEN 'WARNING'
         ELSE 'OK'
@@ -113,7 +172,7 @@ SELECT
       FROM sys.dm_os_performance_counters 
       WHERE counter_name = 'Page life expectancy'
       AND object_name LIKE '%:Buffer Manager%') AS [PageLifeExpectancy_sec]
-    ,CASE
+    ,CASE 
         WHEN (SELECT cntr_value FROM sys.dm_os_performance_counters 
               WHERE counter_name = 'Page life expectancy'
               AND object_name LIKE '%:Buffer Manager%') < 300 THEN 'LOW - Investigate'
@@ -190,8 +249,8 @@ SELECT
      END AS [Status]
 FROM msdb.dbo.sysjobs j
 INNER JOIN msdb.dbo.sysjobhistory h ON j.job_id = h.job_id
-WHERE h.step_id = 0                             -- job outcome step
-  AND h.run_status <> 1                         -- not success
+WHERE h.step_id = 0
+  AND h.run_status <> 1
   AND msdb.dbo.agent_datetime(h.run_date, h.run_time) > DATEADD(HOUR, -24, GETDATE())
 ORDER BY h.run_date DESC, h.run_time DESC;
 
@@ -203,9 +262,9 @@ PRINT '=========================================================================
 -- Suspect / Offline / Emergency databases
 SELECT
     name AS [SuspectOrProblemDB]
-    ,state_desc AS [StateDesc]
+    ,state_desc AS [StateDesc] 
 FROM sys.databases 
-WHERE state NOT IN (0,1,5,7);                   -- ONLINE, RESTORING, etc.
+WHERE state NOT IN (0,1,5,7);
 
 -- Blocking sessions (> 5 sec)
 IF EXISTS (SELECT 1 FROM sys.dm_exec_requests WHERE blocking_session_id <> 0 AND wait_time > 5000)
@@ -215,13 +274,13 @@ IF EXISTS (SELECT 1 FROM sys.dm_exec_requests WHERE blocking_session_id <> 0 AND
         ,r.wait_type
         ,r.wait_time / 1000 AS WaitSeconds
         ,DB_NAME(r.database_id) AS DatabaseName
-        ,SUBSTRING(t.text, r.statement_start_offset/2 + 1, 
+        ,SUBSTRING(st.text, r.statement_start_offset/2 + 1, 
                   ((CASE WHEN r.statement_end_offset = -1 
-                         THEN LEN(CONVERT(nvarchar(max), t.text)) * 2 
+                         THEN LEN(CONVERT(nvarchar(max), st.text)) * 2 
                          ELSE r.statement_end_offset 
                     END - r.statement_start_offset)/2) + 1) AS BlockedQuery
     FROM sys.dm_exec_requests r
-    CROSS APPLY sys.dm_exec_sql_text(r.sql_handle) t
+    CROSS APPLY sys.dm_exec_sql_text(r.sql_handle) st
     WHERE r.blocking_session_id <> 0
       AND r.wait_time > 5000;
 ELSE 
