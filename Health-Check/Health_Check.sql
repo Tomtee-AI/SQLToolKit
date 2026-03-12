@@ -2,7 +2,7 @@
     SQL Server Instance Health Check - Comprehensive
     =========================================================================
     Purpose:    Quick overview of SQL Server instance and database health
-    Author:     Tomtee.eth (customized for DBA Toolkit)
+    Author:     Thomas Thomasson (Written with Grok)
     Compatible: SQL Server 2016+
     Usage:      Execute in SSMS / Azure Data Studio. Review warnings in red/orange.
     =========================================================================
@@ -289,3 +289,4 @@ ELSE
 PRINT '================================================================================';
 PRINT 'Health Check Complete - Review any WARNING/CRITICAL items above.';
 PRINT '================================================================================';
+
