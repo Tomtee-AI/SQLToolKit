@@ -1,0 +1,5 @@
+USE YourDatabase;
+GO
+
+ALTER DATABASE YourDatabase SET ENCRYPTION ON;
+GO
